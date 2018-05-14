@@ -1,0 +1,6 @@
+[package]
+name = "my-service"
+version = "0.1.0"
+authors = ["Alexander Polakov <plhk@sdf.org>"]
+
+[dependencies]
