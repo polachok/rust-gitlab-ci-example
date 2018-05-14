@@ -1,0 +1,5 @@
+FROM ubuntu:16.04
+
+RUN apt-get update && apt-get -qq -y install curl libssl-dev build-essential pkg-config git
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly-2018-05-11
+RUN /bin/bash -c "source ~/.cargo/env && cargo install clippy --vers 0.0.198"

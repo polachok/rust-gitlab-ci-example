@@ -1,0 +1,78 @@
+variables:
+  BUILD_IMAGE: $CI_REGISTRY_IMAGE/build:$CI_COMMIT_REF_SLUG
+  DEPLOY_IMAGE: $CI_REGISTRY_IMAGE:$CI_BUILD_TAG
+
+stages:
+  - pre_build
+  - clippy
+  - test
+  - build
+  - package
+
+create_build_image:
+  stage: pre_build
+  image: docker:17.10
+  tags: [rust]
+  before_script:
+    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
+  script:
+    - docker build --pull -t $BUILD_IMAGE -f Dockerfile.build .
+    - docker push $BUILD_IMAGE
+    - echo "Pushed $BUILD_IMAGE"
+
+clippy:
+  stage: clippy
+  image: $BUILD_IMAGE
+  tags: [rust]
+  before_script:
+    - rm -fr ~/.cargo/registry && mkdir -p /cache/registry && ln -s /cache/registry ~/.cargo/registry
+    - rm -fr ~/.cargo/git && mkdir -p /cache/git && ln -s /cache/git ~/.cargo/git
+    - rm -fr target && mkdir -p /cache/$CI_COMMIT_REF_SLUG/target && ln -s /cache/$CI_COMMIT_REF_SLUG/target target
+    - source ~/.cargo/env
+    - rustc --version
+  script:
+    - RUSTFLAGS="-D warnings" CARGO_INCREMENTAL=1 RUST_BACKTRACE=1 cargo clippy
+
+test:
+  stage: test
+  image: $BUILD_IMAGE
+  tags: [rust]
+  before_script:
+    - rm -fr ~/.cargo/registry && mkdir -p /cache/registry && ln -s /cache/registry ~/.cargo/registry
+    - rm -fr ~/.cargo/git && mkdir -p /cache/git && ln -s /cache/git ~/.cargo/git
+    - rm -fr target && mkdir -p /cache/$CI_COMMIT_REF_SLUG/target && ln -s /cache/$CI_COMMIT_REF_SLUG/target target
+    - source ~/.cargo/env
+    - rustc --version
+  script:
+    - RUSTFLAGS="-D warnings" CARGO_INCREMENTAL=1 RUST_BACKTRACE=1 cargo test -- --nocapture
+
+build_binary:
+  stage: build
+  image: $BUILD_IMAGE
+  tags: [rust]
+  only:
+    - tags
+  before_script:
+    - source ~/.cargo/env
+    - rustc --version
+  script:
+    - rm -fr ~/.cargo/registry && mkdir -p /cache/registry && ln -s /cache/registry ~/.cargo/registry
+    - rm -fr ~/.cargo/git && mkdir -p /cache/git && ln -s /cache/git ~/.cargo/git
+    - rm -fr target && mkdir -p /cache/$CI_COMMIT_REF_SLUG/target && ln -s /cache/$CI_COMMIT_REF_SLUG/target target
+    - RUST_BACKTRACE=1 cargo build --release
+  artifacts:
+      paths:
+        - target/release/${CI_PROJECT_NAME}
+
+build_image:
+  stage: package
+  image: docker:17.10
+  only:
+    - tags
+  tags:
+    - rust
+  before_script:
+    - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
+  script:
+    - docker build --pull -t $DEPLOY_IMAGE .
+    - docker push $DEPLOY_IMAGE
